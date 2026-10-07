@@ -80,7 +80,12 @@ describe("Product listings", () => {
 	it("creates a listing linking a product to a location", async () => {
 		const listing = await payload.create({
 			collection: "productListings",
-			data: { product: ids.product, location: ids.location, status: "active" },
+			data: {
+				product: ids.product,
+				location: ids.location,
+				status: "active",
+				optionValueRule: "all",
+			},
 		});
 		ids.listing = listing.id;
 
@@ -95,6 +100,7 @@ describe("Product listings", () => {
 					product: ids.product,
 					location: ids.location,
 					status: "active",
+					optionValueRule: "all",
 				},
 			}),
 		).rejects.toThrow();

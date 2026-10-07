@@ -267,6 +267,11 @@ export interface ProductListing {
   product: number | Product;
   location: number | Location;
   status: 'draft' | 'active' | 'archived';
+  optionValueRule: 'all' | 'only' | 'except';
+  /**
+   * With "Only these values", options without any selected value stay unrestricted.
+   */
+  optionValues?: (number | ProductOptionValue)[] | null;
   updatedAt: string;
   createdAt: string;
 }
@@ -603,6 +608,8 @@ export interface ProductListingsSelect<T extends boolean = true> {
   product?: T;
   location?: T;
   status?: T;
+  optionValueRule?: T;
+  optionValues?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -254,16 +254,23 @@ const productListingsData = [
 		productHandle: "moose-tshirt",
 		locationTitle: "Maple & Birch - Flagship Store",
 		status: "active",
+		optionValueRule: "all",
+		optionValueHandles: [],
 	},
 	{
 		productHandle: "moose-tshirt",
 		locationTitle: "Maple & Birch - Outlet Store 1",
 		status: "active",
+		optionValueRule: "except",
+		optionValueHandles: ["moose-tshirt-size-l"],
 	},
 	{
 		productHandle: "moose-tshirt",
 		locationTitle: "Harbour St - Vancouver Mall",
 		status: "active",
+		// "only" is per option: colour is restricted, size and style are not
+		optionValueRule: "only",
+		optionValueHandles: ["moose-tshirt-colour-black"],
 	},
 ] as const;
 
@@ -382,7 +389,13 @@ async function seed(): Promise<void> {
 
 	// Product listings
 	for (const productListing of productListingsData) {
-		const { productHandle, locationTitle, status } = productListing;
+		const {
+			productHandle,
+			locationTitle,
+			status,
+			optionValueRule,
+			optionValueHandles,
+		} = productListing;
 		const productId = productIdByHandle.get(productHandle);
 		if (!productId) {
 			throw new Error(`Unknown product handle: ${productHandle}`);
@@ -391,9 +404,22 @@ async function seed(): Promise<void> {
 		if (!locationId) {
 			throw new Error(`Unknown location title: ${locationTitle}`);
 		}
+		const optionValueIds = optionValueHandles.map((handle) => {
+			const id = productOptionValueIdByHandle.get(handle);
+			if (!id) {
+				throw new Error(`Unknown product option value handle: ${handle}`);
+			}
+			return id;
+		});
 		await payload.create({
 			collection: "productListings",
-			data: { product: productId, location: locationId, status },
+			data: {
+				product: productId,
+				location: locationId,
+				status,
+				optionValueRule,
+				optionValues: optionValueIds,
+			},
 		});
 	}
 	summary.productListings = productListingsData.length;
