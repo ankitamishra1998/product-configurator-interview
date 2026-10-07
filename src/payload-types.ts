@@ -76,6 +76,7 @@ export interface Config {
     productOptions: ProductOption;
     productOptionValues: ProductOptionValue;
     skus: Skus;
+    productListings: ProductListing;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -88,9 +89,13 @@ export interface Config {
     organizations: {
       locations: 'locations';
     };
+    locations: {
+      listings: 'productListings';
+    };
     products: {
       options: 'productOptions';
       skus: 'skus';
+      listings: 'productListings';
     };
     productOptions: {
       values: 'productOptionValues';
@@ -109,6 +114,7 @@ export interface Config {
     productOptions: ProductOptionsSelect<false> | ProductOptionsSelect<true>;
     productOptionValues: ProductOptionValuesSelect<false> | ProductOptionValuesSelect<true>;
     skus: SkusSelect<false> | SkusSelect<true>;
+    productListings: ProductListingsSelect<false> | ProductListingsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -244,6 +250,23 @@ export interface Location {
   status: 'draft' | 'active' | 'archived';
   organization: number | Organization;
   address: string;
+  listings?: {
+    docs?: (number | ProductListing)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
+  };
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "productListings".
+ */
+export interface ProductListing {
+  id: number;
+  product: number | Product;
+  location: number | Location;
+  status: 'draft' | 'active' | 'archived';
   updatedAt: string;
   createdAt: string;
 }
@@ -272,6 +295,11 @@ export interface Product {
   };
   skus?: {
     docs?: (number | Skus)[];
+    hasNextPage?: boolean;
+    totalDocs?: number;
+  };
+  listings?: {
+    docs?: (number | ProductListing)[];
     hasNextPage?: boolean;
     totalDocs?: number;
   };
@@ -384,6 +412,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'skus';
         value: number | Skus;
+      } | null)
+    | ({
+        relationTo: 'productListings';
+        value: number | ProductListing;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -508,6 +540,7 @@ export interface LocationsSelect<T extends boolean = true> {
   status?: T;
   organization?: T;
   address?: T;
+  listings?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -522,6 +555,7 @@ export interface ProductsSelect<T extends boolean = true> {
   attributes?: T;
   options?: T;
   skus?: T;
+  listings?: T;
   updatedAt?: T;
   createdAt?: T;
 }
@@ -558,6 +592,17 @@ export interface ProductOptionValuesSelect<T extends boolean = true> {
 export interface SkusSelect<T extends boolean = true> {
   product?: T;
   productOptionValues?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "productListings_select".
+ */
+export interface ProductListingsSelect<T extends boolean = true> {
+  product?: T;
+  location?: T;
+  status?: T;
   updatedAt?: T;
   createdAt?: T;
 }

@@ -248,6 +248,25 @@ const skusData = [
 	},
 ] as const;
 
+// Locations have no handle, so listings reference them by title.
+const productListingsData = [
+	{
+		productHandle: "moose-tshirt",
+		locationTitle: "Maple & Birch - Flagship Store",
+		status: "active",
+	},
+	{
+		productHandle: "moose-tshirt",
+		locationTitle: "Maple & Birch - Outlet Store 1",
+		status: "active",
+	},
+	{
+		productHandle: "moose-tshirt",
+		locationTitle: "Harbour St - Vancouver Mall",
+		status: "active",
+	},
+] as const;
+
 async function seed(): Promise<void> {
 	const payload = await getPayload({ config });
 
@@ -282,16 +301,18 @@ async function seed(): Promise<void> {
 	summary.organizations = organizationsData.length;
 
 	// Locations
+	const locationIdByTitle = new Map<string, number>();
 	for (const location of locationsData) {
 		const { title, status, organizationHandle, address } = location;
 		const organizationId = organizationIdByHandle.get(organizationHandle);
 		if (!organizationId) {
 			throw new Error(`Unknown organization handle: ${organizationHandle}`);
 		}
-		await payload.create({
+		const doc = await payload.create({
 			collection: "locations",
 			data: { title, status, organization: organizationId, address },
 		});
+		locationIdByTitle.set(title, doc.id);
 	}
 	summary.locations = locationsData.length;
 
@@ -358,6 +379,24 @@ async function seed(): Promise<void> {
 		});
 	}
 	summary.skus = skusData.length;
+
+	// Product listings
+	for (const productListing of productListingsData) {
+		const { productHandle, locationTitle, status } = productListing;
+		const productId = productIdByHandle.get(productHandle);
+		if (!productId) {
+			throw new Error(`Unknown product handle: ${productHandle}`);
+		}
+		const locationId = locationIdByTitle.get(locationTitle);
+		if (!locationId) {
+			throw new Error(`Unknown location title: ${locationTitle}`);
+		}
+		await payload.create({
+			collection: "productListings",
+			data: { product: productId, location: locationId, status },
+		});
+	}
+	summary.productListings = productListingsData.length;
 
 	console.log("Seed complete:");
 	for (const [collection, count] of Object.entries(summary)) {

@@ -8,5 +8,8 @@ export default defineConfig({
 		environment: "jsdom",
 		setupFiles: ["./vitest.setup.ts"],
 		include: ["tests/int/**/*.int.spec.ts"],
+		// All test files share one SQLite database; running them in parallel
+		// causes SQLITE_BUSY lock errors.
+		fileParallelism: false,
 	},
 });

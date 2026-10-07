@@ -21,5 +21,11 @@ export const Locations: CollectionConfig = {
 			type: "text",
 			required: true,
 		},
+		{
+			name: "listings",
+			type: "join",
+			collection: "productListings",
+			on: "location",
+		},
 	],
 };

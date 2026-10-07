@@ -31,5 +31,11 @@ export const Products: CollectionConfig = {
 			collection: "skus",
 			on: "product",
 		},
+		{
+			name: "listings",
+			type: "join",
+			collection: "productListings",
+			on: "product",
+		},
 	],
 };

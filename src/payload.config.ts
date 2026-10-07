@@ -10,6 +10,7 @@ import { Clients } from "./collections/Clients";
 import { Locations } from "./collections/Locations";
 import { Media } from "./collections/Media";
 import { Organizations } from "./collections/Organizations";
+import { ProductListings } from "./collections/ProductListings";
 import { ProductOptions } from "./collections/ProductOptions";
 import { ProductOptionValues } from "./collections/ProductOptionValues";
 import { Products } from "./collections/Products";
@@ -44,6 +45,7 @@ export default buildConfig({
 		withGroup(ProductOptions, "Product"),
 		withGroup(ProductOptionValues, "Product"),
 		withGroup(Skus, "Product"),
+		withGroup(ProductListings, "Product"),
 	],
 	editor: lexicalEditor(),
 	secret: process.env.PAYLOAD_SECRET || "",
