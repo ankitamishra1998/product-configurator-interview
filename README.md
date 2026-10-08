@@ -89,6 +89,10 @@ admins decide, for each location, **which products it sells** and **which option
 of each product it offers**, e.g. an outlet that doesn't carry Large, or a mall store
 that only sells Black.
 
+> This is the `shop-demo` branch. It contains everything on `ankita-assignment` plus a
+> demo storefront that shows the configuration working end to end; see
+> [Shop demo](#shop-demo).
+
 ```
 Client ──< Organization ──< Location ──< Product Listing >── Product
                                                │
@@ -187,6 +191,75 @@ same SQLite database, and running the files in parallel caused intermittent
 
 Both test files create and delete their own data. Run them with `pnpm run test:int`.
 
+### Shop demo
+
+A simple storefront at `/shop`, built on the listings, so a shopper at a location can only
+configure SKUs that location offers. Values the location doesn't offer are hidden. Values
+that conflict with the current selection (no SKU exists for the combination) are marked
+but stay clickable; picking one clears the conflicting choice, so shoppers can't get
+stuck. Draft or archived records are never shown.
+
+#### `src/lib/shop.ts` (new)
+
+Server-side data loading through Payload's Local API, returning plain data that can be
+passed to client components:
+
+- `getShopLocations` / `getShopLocation` return active locations whose organization and
+  client are also active.
+- `getLocationProducts` returns active products with an active listing at a location.
+- `getConfiguratorData` returns the options, values and SKUs for a product at a
+  location, narrowed with the same `createOptionValueFilter` the validator uses. It
+  hides inactive options and values, values that appear in no buyable SKU, and SKUs that
+  don't have exactly one value per option. It returns `null` when the product isn't sold
+  at the location.
+
+#### `src/lib/configurator.ts` (new)
+
+The selection logic, with no Payload imports so it runs in the browser:
+
+- `getSelectableValueIds` returns the values of an option that can still lead to a SKU,
+  given the other selections.
+- `selectValue` selects a value and drops other selections that no longer lead to a SKU.
+- `findSelectedSku` returns the matching SKU once every option has a value.
+
+#### `src/app/(frontend)/shop/` (new)
+
+- `layout.tsx` and `shop.css`: the shop's layout and styles.
+- `page.tsx` (`/shop`): active locations grouped by client.
+- `locations/[locationId]/page.tsx`: products sold at a location.
+- `locations/[locationId]/products/[handle]/page.tsx`: loads the configurator data on the
+  server and returns 404 when the product isn't sold there.
+- `locations/[locationId]/products/[handle]/ProductConfigurator.tsx`: the only client
+  component; holds the selection state and renders each option as radio buttons inside
+  a `fieldset`, with a summary that shows the resolved SKU.
+
+#### `src/app/(frontend)/page.tsx`
+
+Adds a "Shop" link to the homepage.
+
+#### `tests/helpers/seedShop.ts` (new)
+
+Creates a test store and product covering every case: a value the listing excludes, an
+archived value and a missing combination. Shared by the integration and E2E tests, and
+deletes everything afterwards.
+
+#### `tests/int/shop.int.spec.ts` (new)
+
+Covers the selection logic and the data loader: narrowing options and SKUs to what the
+listing offers, and hiding the product when its listing isn't active.
+
+#### `tests/e2e/shop.e2e.spec.ts` (new)
+
+Playwright tests for the storefront: navigating to the product, hidden values, choosing
+values through to a SKU (including the conflict case), and the 404. Run them with
+`pnpm run test:e2e`.
+
+#### `tests/e2e/admin.e2e.spec.ts`
+
+The template's list view test expected an exact URL, but Payload adds default query
+parameters (e.g. `?depth=1&limit=10`) after the page loads. The extra load from the shop
+tests made that race fail more often, so the test now accepts query parameters.
+
 ### Key decisions
 
 - **A separate collection rather than relationship fields on Product.** Fields for
@@ -216,8 +289,10 @@ Both test files create and delete their own data. Run them with `pnpm run test:i
   that repetition.
 - **No rules for specific combinations** (e.g. Red only in Babydoll); that would need
   SKU-level restrictions.
-- **No shopper-facing API.** An endpoint for client storefronts would build on
-  `getAvailableSkus`. A demo storefront is available on the `shop-demo` branch.
+- **No shopper-facing API.** The demo storefront loads data inside Next.js; clients with
+  their own storefronts would need an endpoint built on the same loader.
+- **No cart, checkout or prices.** Any checkout would need to re-check the SKU against
+  the listing on the server.
 - **Access control** uses Payload's defaults, so any admin can edit any client's data.
 
 
