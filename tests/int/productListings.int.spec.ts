@@ -93,6 +93,8 @@ describe("Product listings", () => {
 	});
 
 	it("rejects a duplicate product + location listing", async () => {
+		// The unique (product, location) index fails in the database; Payload
+		// reports it as a ValidationError on the index's first column
 		await expect(
 			payload.create({
 				collection: "productListings",
@@ -103,7 +105,18 @@ describe("Product listings", () => {
 					optionValueRule: "all",
 				},
 			}),
-		).rejects.toThrow();
+		).rejects.toMatchObject({
+			name: "ValidationError",
+			data: {
+				errors: [
+					{
+						message: "Value must be unique",
+						path: "product_id",
+						tableName: "product_listings",
+					},
+				],
+			},
+		});
 	});
 
 	it("exposes listings through the product and location join fields", async () => {
