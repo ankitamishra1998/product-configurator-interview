@@ -84,19 +84,10 @@ for details on how to extend this functionality.
 
 ## Per-location product configuration
 
-### Interpretation
-
 The task was to allow product configuration per location. I interpreted this as letting
-admins decide, for each location:
-
-1. **which products it sells**, and
-2. **which option values of each product it offers**, e.g. an outlet that doesn't carry
-   Large, or a mall store that only sells Black.
-
-Shoppers at a location should only be able to configure, and end up with, SKUs that the
-location actually offers.
-
-### Data model
+admins decide, for each location, **which products it sells** and **which option values
+of each product it offers**, e.g. an outlet that doesn't carry Large, or a mall store
+that only sells Black.
 
 ```
 Client ──< Organization ──< Location ──< Product Listing >── Product
@@ -104,118 +95,130 @@ Client ──< Organization ──< Location ──< Product Listing >── Pro
                                                └── option value rule + list ──> Product Option Values
 ```
 
-A new **Product Listings** collection (`src/collections/ProductListings.ts`) represents
-"this product at this location":
+Each Product Listing has a rule that says how to read its list of option values:
 
-| Field             | Purpose                                                        |
-| ----------------- | -------------------------------------------------------------- |
-| `product`         | The product being offered                                      |
-| `location`        | Where it is offered                                            |
-| `status`          | `draft` / `active` / `archived`, like the other collections    |
-| `optionValueRule` | `all`, `only` or `except`; how to read `optionValues`          |
-| `optionValues`    | The option values the rule applies to                          |
+| Rule     | Meaning                                                                                                      |
+| -------- | ------------------------------------------------------------------------------------------------------------ |
+| `all`    | Every value is offered (default)                                                                             |
+| `except` | Every value except the listed ones is offered                                                                |
+| `only`   | Per option: an option with listed values offers just those; an option with no listed values is unrestricted |
 
-A unique index on `(product, location)` prevents a product being listed twice at the same
-location. Products and Locations each have a `listings` join field so both sides show
-their listings in the admin.
+### Changes by file
+
+#### `src/collections/ProductListings.ts` (new)
+
+The new collection, one record per product per location:
+
+- `product` and `location` relationships, both required, with a unique index on the pair
+  so a product can't be listed twice at the same location.
+- `status` (`draft` / `active` / `archived`), shared with the other collections.
+- `optionValueRule` (`all` / `only` / `except`) and `optionValues`, the list the rule
+  applies to.
+- In the admin, `optionValues` is hidden when the rule is `all`, and its dropdown only
+  offers values belonging to the listing's product.
+- A `beforeChange` hook clears `optionValues` when the rule is `all`, so no stale values
+  are left behind.
+- A field validator rejects a listing when the rule is `only` with no values, a value
+  belongs to a different product, or the rule leaves an option with no available values
+  (only possible with `except`). It runs on the server, so it applies to the admin, REST,
+  GraphQL and the Local API alike.
+
+#### `src/lib/optionValueRule.ts` (new)
+
+The rule logic, shared by the validator above and by anything that needs to know what a
+location offers, so the two can't disagree:
+
+- `createOptionValueFilter(listing, optionIdByValueId)` returns a check for whether a
+  single option value is offered. `only` needs to know which option each value belongs
+  to, hence the map.
+- `getOptionIdByValueId(payload, productId)` loads that map for a product.
+- `filterAvailableSkus(listing, skus, optionIdByValueId)` keeps the SKUs whose values are
+  all offered.
+- `getAvailableSkus(payload, listingId)` loads a listing and returns the SKUs available
+  at its location.
+- `toId` normalises relationship values, which may be IDs or populated documents.
+
+#### `src/collections/Products.ts` and `src/collections/Locations.ts`
+
+Each gets a `listings` join field, so a product shows where it's sold and a location
+shows what it sells. Join fields are virtual; nothing extra is stored.
+
+#### `src/payload.config.ts`
+
+Registers the new collection in the admin's "Product" group.
+
+#### `src/payload-types.ts`
+
+Regenerated with `pnpm generate:types` to add the `ProductListing` type and the new join
+fields.
+
+#### `scripts/seed.ts`
+
+Adds one listing per rule for the Moose T-Shirt:
+
+- Maple & Birch - Flagship Store: `all`
+- Maple & Birch - Outlet Store 1: `except` Large
+- Harbour St - Vancouver Mall: `only` Black (size and style stay unrestricted)
+
+Locations have no handle, so the seed now records location IDs by title and listings
+refer to locations by title.
+
+#### `tests/int/productListings.int.spec.ts` (new)
+
+Covers the listing itself: creating one, rejecting a duplicate product and location,
+the join fields on both sides, and finding a client's listings through
+`location.organization.client`.
+
+#### `tests/int/listingOptionValues.int.spec.ts` (new)
+
+Covers the rules, using its own product with two options and four SKUs:
+
+- the SKUs available under `all`, `except` and `only`, including `only` restricting one
+  option and two options at once
+- the list being cleared when switching back to `all`
+- each validation error, asserting the exact field and message
+- a rejected update leaving the listing unchanged
+
+#### `vitest.config.mts`
+
+Sets `fileParallelism: false`. Every test file starts its own Payload instance on the
+same SQLite database, and running the files in parallel caused intermittent
+`SQLITE_BUSY` errors.
+
+Both test files create and delete their own data. Run them with `pnpm run test:int`.
 
 ### Key decisions
 
-**A separate listings collection rather than relationship fields on Product.**
-Putting `clients` and `locations` relationships directly on Product was simpler, but the
-two lists could disagree (a location whose client isn't selected), and there would be
-nowhere to store per-location data. A listing gives availability its own record, which
-is also the natural home for future per-location data such as price or availability
-dates.
-
-**The client is derived, not stored.** A listing only references a location; its client
-is found through location → organization → client. Storing the client as well would
-duplicate data that could drift out of sync. Querying a client's listings works through
-the nested path: `where: { "location.organization.client": { equals: clientId } }`.
-
-**One list plus a rule, instead of separate allow and exclude lists.** With both lists,
-the two can contradict each other, and once an allow list exists an exclude list adds
-nothing. A single list with an explicit rule makes conflicting data impossible to store,
-rather than detecting it after the fact:
-
-| Rule     | Meaning                                                                       |
-| -------- | ----------------------------------------------------------------------------- |
-| `all`    | Every value is offered (default; the list is cleared on save)                 |
-| `except` | Every value except the listed ones is offered                                 |
-| `only`   | Per option: an option with listed values offers just those; an option with no listed values is unrestricted |
-
-The rules also give different defaults when a product changes: under `except`, a newly
-added value is offered automatically; under `only`, a restricted option stays restricted.
-
-**`only` applies per option.** My first version applied `only` across all options, which
-meant listing every size and style just to restrict colour, and silently hid any newly
-added size at every `only` location. Applying it per option means a location only
-constrains the options it cares about: `only [Black]` restricts colour and leaves size and
-style open.
-
-**Availability is computed, not stored.** Nothing is copied onto SKUs. The available
-SKUs are derived from the listing's rule when needed, so there is a single source of
-truth.
-
-### Validation
-
-Rules are enforced in a server-side field validator, so they apply to the admin, REST,
-GraphQL and the Local API alike. The admin's filtered dropdown (only this product's
-values) is a convenience, not a safeguard. A listing is rejected when:
-
-- the rule is `only` and no values are selected,
-- a selected value belongs to a different product, or
-- the rule leaves an option with no available values (only reachable with `except`).
-
-The validator and the SKU availability helpers share the same logic
-(`src/lib/optionValueRule.ts`), so what can be saved and what is offered can't drift
-apart.
-
-### Checking what a location offers
-
-`getAvailableSkus(payload, listingId)` in `src/lib/optionValueRule.ts` returns the SKUs a
-listing makes available at its location, applying the listing's rule. This is the
-starting point for any shopper-facing API or UI.
-
-A demo storefront built on this configuration is available on the `shop-demo` branch.
-
-### Testing
-
-`pnpm run test:int` runs integration tests against Payload and SQLite: listing
-uniqueness, join fields, client lookups, the SKUs available under each option value rule,
-and every validation error (asserting the exact field and message).
-
-Tests create and clean up their own data. Integration test files run one at a time
-(`fileParallelism: false`) because they share one SQLite database.
-
-### Assumptions
-
-- Configuration is set per location only; there is no inheritance from the client or
-  organization.
-- A listing restricts option values, not specific combinations of them.
-- An option value's own `status` turns it off everywhere; listings handle per-location
-  differences.
+- **A separate collection rather than relationship fields on Product.** Fields for
+  clients and locations on Product could disagree with each other, and would leave
+  nowhere to store per-location data such as price.
+- **The client is derived, not stored.** A listing only references a location, and the
+  client is found through location → organization → client, so the two can't
+  contradict each other.
+- **One list plus a rule, rather than separate allow and exclude lists.** Two lists can
+  conflict, and once an allow list exists an exclude list adds nothing. A single list
+  with an explicit rule makes conflicting data impossible to store.
+- **`only` applies per option.** My first version applied it across all options, which
+  meant listing every size and style just to restrict colour, and hid newly added sizes
+  at every `only` location.
+- **Availability is computed, not stored.** It depends on the listing, the SKUs, options
+  and values, so a stored copy would need updating whenever any of them changed. The
+  rule is the single source of truth.
 
 ### Known limitations and next steps
 
-- **SKU validation.** SKUs are not yet checked for one value per option, values from the
-  same product, or duplicate combinations; malformed SKUs should be rejected on save.
-- **Listings are validated only when saved.** If a product's options or values change
-  later, an existing listing can become invalid without being flagged. For example,
-  deleting every value in an `only` list leaves an empty list, which then behaves like
-  `all`. A hook on option value changes could re-check affected listings.
-- **One listing per location.** Offering a product at all of a client's locations takes
-  one listing each. Client- or organization-level rules, combined with location rules,
-  would remove that repetition.
-- **Combination rules** (e.g. Red only in Babydoll) would need SKU-level restrictions.
-- **No shopper-facing API.** Clients with their own storefronts would need an endpoint
-  that returns the available values for a location and resolves a selection to a SKU,
-  built on `getAvailableSkus`. The `shop-demo` branch shows this as a storefront.
-- **Per-location product data** such as price would naturally live on the listing.
-- **No cart or checkout.** Any checkout would need to re-check the SKU against the
-  listing on the server.
-- **Access control.** All collections use Payload's defaults, so any admin can edit any
-  client's data. Client-scoped admin access would need access rules.
+- **SKUs aren't validated.** Nothing checks for one value per option, values from the
+  same product, or duplicate combinations.
+- **Listings are only validated when saved.** If a product's options or values change
+  later, an existing listing can become invalid without being flagged.
+- **Configuration is per location only.** Offering a product at all of a client's
+  locations takes one listing each; client- or organization-level defaults would remove
+  that repetition.
+- **No rules for specific combinations** (e.g. Red only in Babydoll); that would need
+  SKU-level restrictions.
+- **No shopper-facing API.** An endpoint for client storefronts would build on
+  `getAvailableSkus`. A demo storefront is available on the `shop-demo` branch.
+- **Access control** uses Payload's defaults, so any admin can edit any client's data.
 
 
 ## Questions

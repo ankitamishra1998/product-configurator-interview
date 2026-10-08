@@ -70,6 +70,7 @@ export const ProductListings: CollectionConfig = {
 			relationTo: "productOptionValues",
 			hasMany: true,
 			admin: {
+				// Admin UI: only show this field when the rule is not "all"
 				condition: (data) => data?.optionValueRule !== "all",
 				description:
 					'With "Only these values", options without any selected value stay unrestricted.',
@@ -89,6 +90,8 @@ export const ProductListings: CollectionConfig = {
 					return 'Select at least one value when using "Only these values"';
 				}
 
+				// Map of option value IDs to option IDs for this listing's product, used to validate
+				// and filter option values in listings.
 				const optionIdByValueId = await getOptionIdByValueId(
 					req.payload,
 					toId(listing.product),

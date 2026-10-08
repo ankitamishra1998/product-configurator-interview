@@ -22,6 +22,16 @@ export const toId = (value: RelationshipValue): number =>
 
 /**
  * Loads every option value of a product, keyed to its option.
+ * Create a map of option value IDs to option IDs for a product, which is used to validate
+ * and filter option values in listings.
+ * Example: value ID → option ID
+   1 (Small)    → 3 (Size)
+   2 (Medium)   → 3 (Size)
+   3 (Large)    → 3 (Size)
+   4 (Flat)     → 2 (Style)
+   7 (Babydoll) → 2 (Style)
+   5 (Black)    → 1 (Colour)
+   6 (Red)      → 1 (Colour)
  */
 export const getOptionIdByValueId = async (
 	payload: Payload,
